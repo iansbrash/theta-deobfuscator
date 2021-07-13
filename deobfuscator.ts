@@ -26,8 +26,11 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
         if (textToAnalyze[index] === '{') {
             // we want to simulate entering a new scope
             // store variables in an object i.e. {e: 1, t: 2}
-
+            console.log('entering scope')
             let res = analyzeScope(textToAnalyze.substring(index + 1), newScopeVariables)
+
+            console.log('analuzescope res')
+            console.log(res)
 
             analyzedText += res.text
             index += res.elaspedCharacters;
@@ -35,6 +38,7 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
         }
         else if (textToAnalyze[index] === '}') {
             // exit scope
+            console.log('exiting scope')
 
             return {text: `{${analyzedText}}`, elaspedCharacters: index + 2};
         }
@@ -76,6 +80,17 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
                     continue;
 
                 }
+                // if we're declaring a function
+                else if (textToAnalyze.substr(varDecName.length + index + 2, 1) === '{') {
+
+                    // at this point the brackets have already been parsed to the best of their ability
+                    analyzedText += '='
+
+                    // now we should be at the equals, which we will skip
+                    index += varDecName.length + 2;
+
+                    continue;
+                }
 
                 // now we're at the space in between {let, const, var} and the variable name
                 index += varDecName.length + 2;
@@ -116,10 +131,10 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
                     newScopeVariables[varDecName] = eval('(' + toEvalExpression + ')')
                 }
 
-                console.log('cinting')
-
-
                 analyzedText += textToAnalyze.substring(startIndex, endIndex)
+
+                console.log('endIndexnow')
+                console.log(textToAnalyze.substring(endIndex))
 
                 // and we're at the index of the semicolon
                 continue;
@@ -148,10 +163,63 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
 
             // }
 
-            let res = evaluateBracket(textToAnalyze.substring(index + 1), newScopeVariables)
-            console.log(newScopeVariables)
-            analyzedText += "[" + res.variableValue + "]"
-            index += res.rawLength
+
+            // when we encounter a bracket, look at variable that is accessing it and do stuff
+
+            let tempIndex = index;
+            let tempVarChecker = ''
+            tempIndex--;
+            while (textToAnalyze[tempIndex] !== ':' && textToAnalyze[tempIndex] !== ',' && textToAnalyze[tempIndex] !== ' ' && textToAnalyze[tempIndex] !== ';' && textToAnalyze[tempIndex] !== '=' && tempIndex >= 0) {
+                tempVarChecker = textToAnalyze[tempIndex] + tempVarChecker;
+                tempIndex--;
+            }
+
+            console.log(`tempVarChecker: ${tempVarChecker}`)
+
+            // if we can futher abstract it
+            if (Object.keys(newScopeVariables).includes(tempVarChecker)) {
+                console.log('it includes th ekey')
+
+                let newText = ''
+                let newIndex = tempIndex + 1;
+                let bracketCounter = 0;
+                while (textToAnalyze[newIndex] !== ',' && textToAnalyze[newIndex] !== ';') {
+                    if (textToAnalyze[newIndex] === "[") bracketCounter++;
+                    if (textToAnalyze[newIndex] === "]") bracketCounter--;
+                    if (textToAnalyze[newIndex] === "]" && bracketCounter === 0) {
+                        newText  +=  textToAnalyze[newIndex];
+                        break;
+                    }
+                    newText  +=  textToAnalyze[newIndex];
+                    newIndex ++;
+                }
+
+                console.log(`newText: ${newText}`)
+
+                let res = evaluateBracket(newText + "]", newScopeVariables)
+                console.log(res)
+                analyzedText = analyzedText.substr(0, analyzedText.length - tempVarChecker.length)
+                analyzedText += res.variableValue
+
+                // find new index
+                let bracketCounter2 = 0
+                console.log(`FINDG NEW INDEX HERE CURENT INDEX ALUE ${textToAnalyze[index]}`)
+                while (true) {
+                    if (textToAnalyze[index] === '[') bracketCounter2++;
+                    if (textToAnalyze[index] === ']') bracketCounter2--;
+                    if (textToAnalyze[index] === "]" && bracketCounter2 === 0) {
+                        index++;
+                        break;
+                    }
+                    index++;
+                }
+                // index += res.rawLength - 2
+            }
+            else {
+                let res = evaluateBracket(textToAnalyze.substring(index + 1), newScopeVariables)
+                analyzedText += "[" + res.variableValue + "]"
+                index += res.rawLength
+            }
         }
         else {
             analyzedText += textToAnalyze[index];
@@ -204,6 +272,7 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
     let changedToString = false;
 
     console.log(`starting EvaluateBracket with s: ${s}`)
+    // console.log(scopedVariables)
 
     // if we're evaluating a string, not a variable
     if (s[index] === '"' || s[index] === "'" || s[index] === '`') {
@@ -274,6 +343,7 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
 
             // i.e. we're indexing an array
             else if (typeof res.variableValue === 'number') {
+                console.log(`typeofNumber`)
                 if (changedToString) {
                     // if (personalAccumulatorVariableValue[res.variableValue]) {
                     //     personalAccumulatorVariableValue += "[" +  personalAccumulatorVariableValue[res.variableValue] + "]"
@@ -306,6 +376,9 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
                             personalAccumulatorVariableValue = res.variableValue
                         }
                         else {
+                            console.log('ASDLASDASDASD')
+                            console.log(scopedVariables[variableName][res.variableValue])
+
                             personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue];
                         }
                     }
@@ -344,7 +417,8 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
 
         }
         else if (s[index] === ']') {
-            if (personalAccumulatorVariableValue) {
+            console.log('side bracket with ' + personalAccumulatorVariableValue)
+            if (personalAccumulatorVariableValue !== undefined) {
                 if (isOnlyNumbers(personalAccumulatorVariableValue)) {
                     return {variableValue: personalAccumulatorVariableValue, rawLength: index + 2}
                 }
