@@ -89,31 +89,144 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
     let index = 0;
     let variableName = ''
     let personalAccumulatorVariableValue;
+    let changedToString = false;
+
+    // if we're evaluating a string, not a variable
+    if (s[index] === '"' || s[index] === "'" || s[index] === '`') {
+
+        let delimeter = s[index];
+        
+        variableName = '"';
+        index++;
+
+        while (index < s.length) {
+
+            // we're closing off
+            if (s[index] === delimeter) {
+                variableName += '"'
+                return { variableValue: variableName, rawLength: variableName.length + 2}
+            }
+            else {
+                variableName += s[index];
+                index++;
+            }
+        }
+    }
+
+    // else we're not evaluating a string
     while (index < s.length) {
         if (s[index] !== '[' && s[index] !== ']') {
             variableName += s[index];
-            // console.log('detected neighte, new varibla ame: ' + variableName)
             index++;
         }
         else if (s[index] === '[') {
-            // console.log(`detected [`)
             // recursive bracket evaluation
             let res = evaluateBracket(s.substring(index + 1), scopedVariables);
-            // console.log('res: ' + res + " " + typeof res)
+
+            // if we just evaluated a string
+            if (res.variableValue[0] === '"') {
+                if (personalAccumulatorVariableValue) {
+                    if (changedToString) {
+                        personalAccumulatorVariableValue += "[" + res.variableValue + "]"
+                    }
+                    else {
+                        if (personalAccumulatorVariableValue[res.variableValue.substring(1, res.variableValue.length - 1)]) {
+                            personalAccumulatorVariableValue = personalAccumulatorVariableValue[res.variableValue.substring(1, res.variableValue.length - 1)]
+                        }
+                        else {
+                            changedToString = true;
+                            personalAccumulatorVariableValue += "[" + res.variableValue + "]"
+                        }
+                    }
+                }
+
+                else {
+                    if (scopedVariables[variableName]) {
+                        if (scopedVariables[variableName][res.variableValue.substring(1, res.variableValue.length - 1)]) {
+                            personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue.substring(1, res.variableValue.length - 1)]
+                        }
+                        else {
+                            personalAccumulatorVariableValue = variableName + "[" + res.variableValue + "]"
+                            changedToString = true;
+                        }
+                    }
+                    else {
+                        changedToString = true;
+                        personalAccumulatorVariableValue = variableName + "[" + res.variableValue + "]"
+                    }
+                }
+
+            }
+
+            // i.e. we're indexing an array
+            else if (typeof res.variableValue === 'number') {
+                if (changedToString) {
+                    // if (personalAccumulatorVariableValue[res.variableValue]) {
+                    //     personalAccumulatorVariableValue += "[" +  personalAccumulatorVariableValue[res.variableValue] + "]"
+                    // }
+                    // else {
+
+                    // }
+                    personalAccumulatorVariableValue += "[" + res.variableValue + "]"
+                }
+                else {
+                    if (personalAccumulatorVariableValue) {
+                        if (personalAccumulatorVariableValue[res.variableValue]) {
+                            personalAccumulatorVariableValue = personalAccumulatorVariableValue[res.variableValue]
+                        }
+                        // property doesnt exist so we change to string
+                        else {
+                            changedToString = true;
+                            personalAccumulatorVariableValue += "[" + res.variableValue + "]"
+                        }
+                        // if (!scopedVariables[variableName]) {
+                        //     personalAccumulatorVariableValue += "[" + res.variableValue + "]";
+                        // }
+                        // else {
+                        //     personalAccumulatorVariableValue += "[" + scopedVariables[variableName][res.variableValue] + "]";
+                        // }
+                    }
+                    else {
+                        if (!scopedVariables[variableName]) {
+                            changedToString = true;
+                            personalAccumulatorVariableValue = res.variableValue
+                        }
+                        else {
+                            personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue];
+                        }
+                    }
+                }
+            }
+            // if its a string, we check if its an object property and act accordingly
+            else {
+                if (personalAccumulatorVariableValue) {
+                    if (changedToString) {
+                        personalAccumulatorVariableValue += "[" + '"' + res.variableValue + '"' + "]";
+                    }
+                    else {
+                        if (personalAccumulatorVariableValue[res.variableValue]) {
+                            personalAccumulatorVariableValue = personalAccumulatorVariableValue[res.variableValue];
+                        }
+                        else {
+                            changedToString = true;
+                            personalAccumulatorVariableValue += "[" + '"' + res.variableValue + '"' + "]";
+                        }
+                    }
+
+                }
+                else {
+                    if (!scopedVariables[variableName]) {
+                        changedToString = true;
+                        personalAccumulatorVariableValue = '"' +  res.variableValue + '"';
+                    }
+                    else {
+                        personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue];
+                    }
+                }
+            }
+
             index += res.rawLength;
-
-
-            // console.log(`res.variableValue: ${res.variableValue} ${typeof res.variableValue}`)
-            // console.log(`personalAccumulatorVariableValue`)
-            // console.log(personalAccumulatorVariableValue)
-            // console.log(`variableName: ${variableName}`)
-            personalAccumulatorVariableValue = personalAccumulatorVariableValue ? personalAccumulatorVariableValue[res.variableValue] : scopedVariables[variableName][res.variableValue];
-            // console.log(`personalAccumulatorVariableValue`)
-            // console.log(personalAccumulatorVariableValue)
-            // console.log(`remaining string to parse: ${s.substring(index)}`)
-
             variableName = ''
-
 
         }
         else if (s[index] === ']') {
@@ -121,14 +234,18 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
                 return {variableValue: personalAccumulatorVariableValue, rawLength: index + 2}
             }
             
-            // console.log(`detected ]`)
             // check that variableName isn't a straight number
             if (isOnlyNumbers(variableName)) {
                 // treat as an index
                 return {variableValue: parseInt(variableName), rawLength: variableName.length + 2}; // +2 for [ and ]
             }
             else {
-                return {variableValue: scopedVariables[variableName], rawLength: variableName.length + 2}
+                if (scopedVariables[variableName] === undefined) {
+                    return {variableValue: variableName, rawLength: variableName.length + 2}
+                }
+                else {
+                    return {variableValue: scopedVariables[variableName], rawLength: variableName.length + 2}
+                }
             }
         }
     }
