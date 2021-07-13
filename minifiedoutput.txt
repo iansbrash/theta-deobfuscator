@@ -1,0 +1,26 @@
+function() {
+    var _illi = ['data', 'get', 'element', 'bindElement', 'options', 0, 'cycleBuffer', 'prototype'];
+
+    function e(e) {
+        var _IlIIlii1 = function(_lIliI1L1, _OOQOQ0Q0) {
+            var _0O0 = [.7865269701037187, .6067673098809732, .5183132919602331, .034225968498899695];
+            var _ilIIl111 = _0O0[1],
+                _OQO0QQOO = _0O0[2],
+                _00OQQQQ0 = _0O0[3];
+            return _0O0[0]
+        };
+        this["options"] = e, this["element"] = e["element"], this["data"] = {
+            clicks: _illi[5],
+            touches: _illi[5],
+            keyPresses: _illi[5],
+            cuts: _illi[5],
+            copies: _illi[5],
+            pastes: _illi[5],
+            keyPressTimeIntervals: [],
+            mouseClickPositions: [],
+            keyCycles: [],
+            mouseCycles: [],
+            touchCycles: []
+        }, this["bindElement"](e["cycleBuffer"])
+    }
+}
