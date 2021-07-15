@@ -1,14 +1,13 @@
 const fs = require('fs');
 
 (async () => {
-    const textToAnalyze = await fs.promises.readFile("test3.txt", "utf8");
+    const textToAnalyze = await fs.promises.readFile("test4.txt", "utf8");
 
 
     console.log(textToAnalyze);
 
     let res = analyzeScope(textToAnalyze, {})
     console.log(res)
-
 
 })();
 
@@ -101,6 +100,9 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
                 let bracketCounter = 0;
                 while (true) {
                     if (textToAnalyze[index] === '[') {
+                        // let res = evaluateBracket(textToAnalyze.substring(index + 1), scopedVariables)
+                        // index += res.rawLength
+
                         bracketCounter++;
                     }
                     else if (textToAnalyze[index] === ']') {
@@ -124,6 +126,8 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
 
                 if (toEvalExpression.substring(1).includes("[")) {
                     let res = evaluateBracket(toEvalExpression + "]", newScopeVariables)
+                    console.log('aobutg to eval ')
+                    console.log(res)
                     newScopeVariables[varDecName] = eval('(' + res.variableValue + ')')
 
                 }
@@ -421,6 +425,9 @@ export const evaluateBracket = (s : string, scopedVariables : object) : {variabl
             if (personalAccumulatorVariableValue !== undefined) {
                 if (isOnlyNumbers(personalAccumulatorVariableValue)) {
                     return {variableValue: personalAccumulatorVariableValue, rawLength: index + 2}
+                }
+                else if (personalAccumulatorVariableValue.includes('"')) {
+                    return {variableValue: "'" +  personalAccumulatorVariableValue + "'", rawLength: index + 2}
                 }
                 else {
                     return {variableValue: '"' + personalAccumulatorVariableValue + '"', rawLength: index + 2}
