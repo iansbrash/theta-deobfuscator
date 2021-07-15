@@ -1,99 +1,119 @@
 const fs = require('fs');
 
 (async () => {
-    const textToAnalyze = await fs.promises.readFile("test4.txt", "utf8");
+    const textToAnalyze = await fs.promises.readFile("newDeobTest.txt", "utf8");
 
 
-    console.log(textToAnalyze);
+    // console.log(textToAnalyze);
 
-    let res = analyzeScope(textToAnalyze, {})
-    console.log(res)
+    // let res = analyzeScope(textToAnalyze, {})
+    // console.log(res)
+
+    // let res = await deobfuscate(textToAnalyze, '_$sZ', ['key', 'time', 2])
+    // console.log(res)
+    const res = await analyzeScope(textToAnalyze, {});
+    // console.log(res)
+    // const res = textToAnalyze.substring(5350)
+
+    await fs.promises.writeFile('output.txt', res);
 
 })();
 
-const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text: string, elaspedCharacters: number} => {
-    let analyzedText = '';
+// find all variables that are arrays
+// store them in a scope variable (i.e. {t: [1, 2, 3]})
+// loop over original textToAnalyze, scope like usual (i.e. delimiting by { and })
+// use regex from that github repo to find and replace instances of array
 
-    // create copy to add to
-    let newScopeVariables = JSON.parse( JSON.stringify(scopedVariables) )
+async function deobfuscate(originalString, arrayVarName, deobArray) {
+    var newString = originalString;
+    var replace;
+
+    if (deobArray.length === 0) return originalString;
+
+    if (arrayVarName === 's') console.log('HERE')
+
+    for(var x = 0; x < deobArray.length; x++){
+        replace = `${arrayVarName}[${x}]`.toString();
+        if (arrayVarName === 's') console.log(replace)
+        newString = await newString.split(`[${replace}]`).join(`.${deobArray[x]}`);
+    }
 
 
+    let buildingString = '';
+
+
+    for(var x = 0; x < deobArray.length; x++){
+        let index = 0;
+        replace = `${arrayVarName}[${x}]`.toString();
+
+        let tearString = newString;
+
+        while (index !== -1) {
+            
+            index = tearString.indexOf(replace);
+            if (index === -1) {
+                buildingString += tearString;
+            }
+            else if (index !== 0 && tearString[index - 1].match(/^[a-zA-Z_$][a-zA-Z_$0-9]*$/)) {
+                buildingString += tearString.substring(0, index + replace.length)
+                tearString = tearString.substring(index + replace.length);
+                index = 0;
+            }
+            else {
+                let toRep = `${deobArray[x]}`;
+                buildingString += tearString.substring(0, index) + toRep
+                tearString = tearString.substring(index + replace.length);
+                // newString = newString.substring(0, index) + `${deobArray[x]}` + newString.substr(replace.length)
+                index = 0;
+            }
+        }
+
+        newString = buildingString;
+        buildingString = '';
+    }
+
+    return newString;
+}
+
+const analyzeScope = async (textToAnalyze : string, scopedVariables : object) : Promise<any> => { //{text: string, elaspedCharacters: number} 
+    // try to detect array variable declarations
+    // adding variables to scope
     let index = 0;
+    let analyzedText = '';
+    let newScopeVariables = JSON.parse(JSON.stringify(scopedVariables));
+
     while (index < textToAnalyze.length) {
 
-        // handle curly braces
-        if (textToAnalyze[index] === '{') {
-            // we want to simulate entering a new scope
-            // store variables in an object i.e. {e: 1, t: 2}
-            console.log('entering scope')
-            let res = analyzeScope(textToAnalyze.substring(index + 1), newScopeVariables)
 
-            console.log('analuzescope res')
-            console.log(res)
-
-            analyzedText += res.text
-            index += res.elaspedCharacters;
-            continue;
-        }
-        else if (textToAnalyze[index] === '}') {
-            // exit scope
-            console.log('exiting scope')
-
-            return {text: `{${analyzedText}}`, elaspedCharacters: index + 2};
-        }
-        // adding variables to scope
-        else if (textToAnalyze[index] === '=') {
+        // console.log(`index: ${index}`)
+        if (textToAnalyze[index] === '=') {
             if (textToAnalyze[index - 1] !== '=' && textToAnalyze[index + 1] !== '=') {
+
+                // if we're not declaring an array we don't want it
+                if (textToAnalyze[index + 1] !== '[') {
+                    analyzedText += '=';
+                    index++;
+                    continue;
+                }
+                
                 let startIndex = index;
                 // recognize assignment / declaration
                 index--;
                 let varDecName = '';
-                while (textToAnalyze[index] !== ' ' && textToAnalyze[index] !== ';' && textToAnalyze[index] !== ',') {
+                while (textToAnalyze[index] !== ' ' && textToAnalyze[index] !== ';' && textToAnalyze[index] !== ',' && textToAnalyze[index] !== '(' && textToAnalyze[index] !== '{') {
                     varDecName = textToAnalyze[index] + varDecName
                     index--;
                 }
 
-
-                // aka we're referencing this[thing] or its not something we can assign to the scope
-                if (varDecName.includes("[") || varDecName.includes("]")) {
-
-                    // at this point the brackets have already been parsed to the best of their ability
-                    analyzedText += '='
-
-
-                    // now we should be at the equals, which we will skip
+                // we're not gonna fuck with this[thing] or this.thing
+                if (varDecName.substring(0, 5) === 'this[' || varDecName.substring(0, 5) === 'this.') {
+                    analyzedText += '=';
                     index += varDecName.length + 2;
-
                     continue;
                 }
-                // if we're declaring a function
-                else if (textToAnalyze.substr(varDecName.length + index + 2, 8) === 'function') {
-
-                    // at this point the brackets have already been parsed to the best of their ability
-                    analyzedText += '='
-
-
-                    // now we should be at the equals, which we will skip
-                    index += varDecName.length + 2;
-
-                    continue;
-
-                }
-                // if we're declaring a function
-                else if (textToAnalyze.substr(varDecName.length + index + 2, 1) === '{') {
-
-                    // at this point the brackets have already been parsed to the best of their ability
-                    analyzedText += '='
-
-                    // now we should be at the equals, which we will skip
-                    index += varDecName.length + 2;
-
-                    continue;
-                }
-
+    
                 // now we're at the space in between {let, const, var} and the variable name
                 index += varDecName.length + 2;
-
                 // now we're at the beginning of the assignment expression
                 // for now we're going to assume ; terminates assignment (keep in mind commas can too, with the comma operator)
                 let toEvalExpression = '';
@@ -102,7 +122,7 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
                     if (textToAnalyze[index] === '[') {
                         // let res = evaluateBracket(textToAnalyze.substring(index + 1), scopedVariables)
                         // index += res.rawLength
-
+    
                         bracketCounter++;
                     }
                     else if (textToAnalyze[index] === ']') {
@@ -114,339 +134,65 @@ const analyzeScope = (textToAnalyze : string, scopedVariables : object) : {text:
                     else if (textToAnalyze[index] === ',' && bracketCounter === 0) {
                         break;
                     }
+
+                    if (textToAnalyze[index] === ']' && bracketCounter === 0) {
+                        toEvalExpression += textToAnalyze[index];
+                        // index++;
+                        break;
+                    }
+
                     toEvalExpression += textToAnalyze[index]
                     index++;
                 }
-
+    
                 let endIndex = index;
-
+    
                 // now we have our eval expression
-                console.log(`varDecName: ${varDecName}`)
-                console.log(`toEvnalExp: ${toEvalExpression}`)
+                // console.log(`varDecName: ${varDecName}`)
+                // console.log(`toEvnalExp: ${toEvalExpression}`)
 
-                if (toEvalExpression.substring(1).includes("[")) {
-                    let res = evaluateBracket(toEvalExpression + "]", newScopeVariables)
-                    console.log('aobutg to eval ')
-                    console.log(res)
-                    newScopeVariables[varDecName] = eval('(' + res.variableValue + ')')
-
+                if (varDecName === '_$S') {
+                    // console.log(`_$S: ${index}`);
+                    // console.log(textToAnalyze.substring(index))
                 }
-                else {
+                
+                try {
                     newScopeVariables[varDecName] = eval('(' + toEvalExpression + ')')
+                    // analyzedText += textToAnalyze.substring(startIndex, endIndex)
+        
+                    // console.log('endIndexnow')
+                    // console.log(textToAnalyze.substring(endIndex))
+        
+                    // and we're at the index of the semicolon
+                    let toReplace = await deobfuscate(textToAnalyze.substring(index), varDecName, newScopeVariables[varDecName])
+                    // console.log(toReplace)
+                    analyzedText += textToAnalyze.substring(startIndex, endIndex);
+                    textToAnalyze = textToAnalyze.substring(0, index) + toReplace;
+                    if (textToAnalyze.includes('new Date()[_$307]()')) console.log(`fucks up at ${varDecName}`)
+
+                    continue;
+                }
+                catch (err) {
+                    console.log(`Error trying to eval ${toEvalExpression}`)
+                    // console.log(err)
+                    analyzedText += textToAnalyze.substring(startIndex, endIndex);
                 }
 
-                analyzedText += textToAnalyze.substring(startIndex, endIndex)
-
-                console.log('endIndexnow')
-                console.log(textToAnalyze.substring(endIndex))
-
-                // and we're at the index of the semicolon
-                continue;
-            }
-        }
-
-        // // handle let variable declaration
-        // if (textToAnalyze.substr(index, 4) === 'let ') {
-        //     // get ready to record variable
-        // }
-        // // handle var variable declaration
-        // else if (textToAnalyze.substr(index, 4) === 'var ') {
-
-        // }
-        // // handle const variable declaration
-        // else if (textToAnalyze.substr(index, 6) === 'const ') {
-
-        // }
-        // // handle bracket
-        // else 
-        if (textToAnalyze[index] === '[' || textToAnalyze[index] === ']') { // close bracket shouldnt happen
-
-            // co
-            // index--;
-            // while (textToAnalyze[index] !== ' ') {
-
-            // }
-
-
-            // when we encounter a bracket, look at variable that is accessing it and do stuff
-
-            let tempIndex = index;
-            let tempVarChecker = ''
-            tempIndex--;
-            while (textToAnalyze[tempIndex] !== ':' && textToAnalyze[tempIndex] !== ',' && textToAnalyze[tempIndex] !== ' ' && textToAnalyze[tempIndex] !== ';' && textToAnalyze[tempIndex] !== '=' && tempIndex >= 0) {
-                tempVarChecker = textToAnalyze[tempIndex] + tempVarChecker;
-                tempIndex--;
-            }
-
-            console.log(`tempVarChecker: ${tempVarChecker}`)
-
-            // if we can futher abstract it
-            if (Object.keys(newScopeVariables).includes(tempVarChecker)) {
-                console.log('it includes th ekey')
-
-                let newText = ''
-                let newIndex = tempIndex + 1;
-                let bracketCounter = 0;
-                while (textToAnalyze[newIndex] !== ',' && textToAnalyze[newIndex] !== ';') {
-                    if (textToAnalyze[newIndex] === "[") bracketCounter++;
-                    if (textToAnalyze[newIndex] === "]") bracketCounter--;
-                    if (textToAnalyze[newIndex] === "]" && bracketCounter === 0) {
-                        newText  +=  textToAnalyze[newIndex];
-                        break;
-                    }
-                    newText  +=  textToAnalyze[newIndex];
-                    newIndex ++;
-                }
-
-                console.log(`newText: ${newText}`)
-
-                let res = evaluateBracket(newText + "]", newScopeVariables)
-                console.log(res)
-                analyzedText = analyzedText.substr(0, analyzedText.length - tempVarChecker.length)
-                analyzedText += res.variableValue
-
-                // find new index
-                let bracketCounter2 = 0
-                console.log(`FINDG NEW INDEX HERE CURENT INDEX ALUE ${textToAnalyze[index]}`)
-                while (true) {
-                    if (textToAnalyze[index] === '[') bracketCounter2++;
-                    if (textToAnalyze[index] === ']') bracketCounter2--;
-                    if (textToAnalyze[index] === "]" && bracketCounter2 === 0) {
-                        index++;
-                        break;
-                    }
-                    index++;
-                }
-                // index += res.rawLength - 2
             }
             else {
-                let res = evaluateBracket(textToAnalyze.substring(index + 1), newScopeVariables)
-                analyzedText += "[" + res.variableValue + "]"
-                index += res.rawLength
+                analyzedText += textToAnalyze[index];
+                index++;
             }
         }
         else {
             analyzedText += textToAnalyze[index];
             index++;
         }
-
     }
 
-    return {text: analyzedText, elaspedCharacters: textToAnalyze.length};
-}
-
-const recordVariable = (s : string, scopedVariables : object) => {
-    // eval the expression until we hit an unescaped or quoted ; (semicolon)
-
-    // record variable name (stop when we see =)
-    let index = 0;
-    let variableName = '';
-    while (s[index] !== '=') {
-        variableName += s[index];
-        index++;
-    }
-
-    // now we are at = which we will skip
-    index++;
-
-    let variableValue = '';
-    // now we want to eval what the variable is, keeping in mind we might encounter [ and ]
-    // we also need to make sure the semicolon we stop at is actually where we're supposed to stop
-    while (s[index] !== ';') {
-        if (s[index] === "[") {
-
-        }
-        else {
-            variableValue += s[index];
-        }
-    }
-
-    // now we need to evaluate what the variable actually is
+    return analyzedText;
 }
 
 const isOnlyNumbers = (s : string) : boolean => {
     return /^\d+$/.test(s);
-}
-
-// s starts after [
-export const evaluateBracket = (s : string, scopedVariables : object) : {variableValue: any, rawLength: number}=> {
-    let index = 0;
-    let variableName = ''
-    let personalAccumulatorVariableValue;
-    let changedToString = false;
-
-    console.log(`starting EvaluateBracket with s: ${s}`)
-    // console.log(scopedVariables)
-
-    // if we're evaluating a string, not a variable
-    if (s[index] === '"' || s[index] === "'" || s[index] === '`') {
-
-        let delimeter = s[index];
-        
-        variableName = '"';
-        index++;
-
-        while (index < s.length) {
-
-            // we're closing off
-            if (s[index] === delimeter) {
-                variableName += '"'
-                return { variableValue: variableName, rawLength: variableName.length + 2}
-            }
-            else {
-                variableName += s[index];
-                index++;
-            }
-        }
-    }
-
-    // else we're not evaluating a string
-    while (index < s.length) {
-        if (s[index] !== '[' && s[index] !== ']') {
-            variableName += s[index];
-            index++;
-        }
-        else if (s[index] === '[') {
-            // recursive bracket evaluation
-            let res = evaluateBracket(s.substring(index + 1), scopedVariables);
-
-            // if we just evaluated a string
-            if (res.variableValue[0] === '"') {
-                if (personalAccumulatorVariableValue) {
-                    if (changedToString) {
-                        personalAccumulatorVariableValue += "[" + res.variableValue + "]"
-                    }
-                    else {
-                        if (personalAccumulatorVariableValue[res.variableValue.substring(1, res.variableValue.length - 1)]) {
-                            personalAccumulatorVariableValue = personalAccumulatorVariableValue[res.variableValue.substring(1, res.variableValue.length - 1)]
-                        }
-                        else {
-                            changedToString = true;
-                            personalAccumulatorVariableValue += "[" + res.variableValue + "]"
-                        }
-                    }
-                }
-
-                else {
-                    if (scopedVariables[variableName]) {
-                        if (scopedVariables[variableName][res.variableValue.substring(1, res.variableValue.length - 1)]) {
-                            personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue.substring(1, res.variableValue.length - 1)]
-                        }
-                        else {
-                            personalAccumulatorVariableValue = variableName + "[" + res.variableValue + "]"
-                            changedToString = true;
-                        }
-                    }
-                    else {
-                        changedToString = true;
-                        personalAccumulatorVariableValue = variableName + "[" + res.variableValue + "]"
-                    }
-                }
-
-            }
-
-            // i.e. we're indexing an array
-            else if (typeof res.variableValue === 'number') {
-                console.log(`typeofNumber`)
-                if (changedToString) {
-                    // if (personalAccumulatorVariableValue[res.variableValue]) {
-                    //     personalAccumulatorVariableValue += "[" +  personalAccumulatorVariableValue[res.variableValue] + "]"
-                    // }
-                    // else {
-
-                    // }
-                    personalAccumulatorVariableValue += "[" + res.variableValue + "]"
-                }
-                else {
-                    if (personalAccumulatorVariableValue) {
-                        if (personalAccumulatorVariableValue[res.variableValue]) {
-                            personalAccumulatorVariableValue = personalAccumulatorVariableValue[res.variableValue]
-                        }
-                        // property doesnt exist so we change to string
-                        else {
-                            changedToString = true;
-                            personalAccumulatorVariableValue += "[" + res.variableValue + "]"
-                        }
-                        // if (!scopedVariables[variableName]) {
-                        //     personalAccumulatorVariableValue += "[" + res.variableValue + "]";
-                        // }
-                        // else {
-                        //     personalAccumulatorVariableValue += "[" + scopedVariables[variableName][res.variableValue] + "]";
-                        // }
-                    }
-                    else {
-                        if (!scopedVariables[variableName]) {
-                            changedToString = true;
-                            personalAccumulatorVariableValue = res.variableValue
-                        }
-                        else {
-                            console.log('ASDLASDASDASD')
-                            console.log(scopedVariables[variableName][res.variableValue])
-
-                            personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue];
-                        }
-                    }
-                }
-            }
-            // if its a string, we check if its an object property and act accordingly
-            else {
-                if (personalAccumulatorVariableValue) {
-                    if (changedToString) {
-                        personalAccumulatorVariableValue += "[" + '"' + res.variableValue + '"' + "]";
-                    }
-                    else {
-                        if (personalAccumulatorVariableValue[res.variableValue]) {
-                            personalAccumulatorVariableValue = personalAccumulatorVariableValue[res.variableValue];
-                        }
-                        else {
-                            changedToString = true;
-                            personalAccumulatorVariableValue += "[" + '"' + res.variableValue + '"' + "]";
-                        }
-                    }
-
-                }
-                else {
-                    if (!scopedVariables[variableName]) {
-                        changedToString = true;
-                        personalAccumulatorVariableValue = '"' +  res.variableValue + '"';
-                    }
-                    else {
-                        personalAccumulatorVariableValue = scopedVariables[variableName][res.variableValue];
-                    }
-                }
-            }
-
-            index += res.rawLength;
-            variableName = ''
-
-        }
-        else if (s[index] === ']') {
-            console.log('side bracket with ' + personalAccumulatorVariableValue)
-            if (personalAccumulatorVariableValue !== undefined) {
-                if (isOnlyNumbers(personalAccumulatorVariableValue)) {
-                    return {variableValue: personalAccumulatorVariableValue, rawLength: index + 2}
-                }
-                else if (personalAccumulatorVariableValue.includes('"')) {
-                    return {variableValue: "'" +  personalAccumulatorVariableValue + "'", rawLength: index + 2}
-                }
-                else {
-                    return {variableValue: '"' + personalAccumulatorVariableValue + '"', rawLength: index + 2}
-                }
-            }
-            
-            // check that variableName isn't a straight number
-            if (isOnlyNumbers(variableName)) {
-                // treat as an index
-                return {variableValue: parseInt(variableName), rawLength: variableName.length + 2}; // +2 for [ and ]
-            }
-            else {
-                if (scopedVariables[variableName] === undefined) {
-                    return {variableValue: variableName, rawLength: variableName.length + 2}
-                }
-                else {
-                    return {variableValue: scopedVariables[variableName], rawLength: variableName.length + 2}
-                }
-            }
-        }
-    }
 }

@@ -1,1 +1,0 @@
-function(){let a=['test1',"test2",'test3'];b={"test2":"Complete"};console.log(b[a[1]]);};
